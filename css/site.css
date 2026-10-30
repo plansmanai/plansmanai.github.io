@@ -252,7 +252,7 @@ form.sent { display: none; } form.sent + .form-done { display: block; }
 
 /* Client portal embed + SMS consent page */
 .portal-frame { background: var(--matte); border: 1px solid var(--rule); }
-.portal-frame iframe { display: block; width: 100%; height: min(900px, 110svh); border: 0; }
+.portal-frame iframe { display: block; width: 100%; height: clamp(480px, 70svh, 640px); border: 0; }
 .consent { display: grid; grid-template-columns: auto 1fr; gap: .8rem; align-items: start; font-size: .85rem; line-height: 1.5; color: var(--muted); }
 .consent input { margin-top: .3rem; accent-color: var(--fg); }
 .legal { display: grid; gap: 3rem; }
