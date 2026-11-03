@@ -126,7 +126,7 @@ body { font-family: 'Lato', "Helvetica Neue", Arial, sans-serif; color: var(--in
 
 /* ── Always side by side (Lance 2026-11-03: "the 2 will need to be side by side, not stacked"). The split is
    draggable (#splitter) and remembered; narrow screens just get thinner columns, never a stack. ── */
-#main { grid-template-columns: minmax(0, var(--split, 58fr)) 10px minmax(0, 1fr); gap: 0; }
+#main { grid-template-columns: minmax(0, var(--split, 58%)) 10px minmax(0, 1fr); gap: 0; }
 #splitter { cursor: col-resize; position: relative; }
 #splitter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: var(--line); border-radius: 2px; }
 #splitter:hover::after, #splitter.drag::after { background: var(--accent); }
