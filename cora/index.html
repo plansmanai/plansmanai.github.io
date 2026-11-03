@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Cora — Plansman</title>
+<link rel="icon" type="image/png" href="logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+/* Cockpit for Cora, Plansman's permit bot (Lance 2026-11-03): LEFT = what she is looking at (her city-portal
+   browser, a frame every few seconds), RIGHT = the Telegram thread, live, with a reply box. Same chrome
+   vocabulary as plansman.com/work (black bar, #199ad0 accent, Bebas/Lato). Data: Supabase RPCs gated by a
+   PIN-issued session token (portal/schema.sql) — the page never holds a Supabase table key, only the anon key. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --accent: #199ad0; --accent-dark: #1688b7; --ink: #1a1a2e; --muted: #7a8089; --line: #e3e6ea;
+  --bg: #f3f5f7; --card: #fff; --me: #199ad0; --her: #eef1f4; --sys: #fbf3dc; --warn: #e67e22; --bad: #c0392b; --good: #27ae60;
+}
+html, body { height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { font-family: 'Lato', "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--bg);
+  display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Top bar ── */
+#bar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; padding: 0 16px; height: 52px;
+  background: rgba(0,0,0,0.9); border-top: 3px solid var(--accent); color: #fff; }
+#bar img { height: 30px; display: block; }
+#bar .title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 1px; color: #fff; }
+#bar .title span { color: var(--accent); }
+#bar .spacer { flex: 1; }
+.pill { font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; padding: 5px 10px;
+  border-radius: 999px; background: #333; color: #ccc; white-space: nowrap; }
+.pill.on { background: var(--good); color: #fff; }
+.pill.off { background: #555; color: #ddd; }
+.pill.busy { background: var(--accent); color: #fff; }
+.pill.wait { background: var(--warn); color: #fff; animation: pulse 1.2s infinite; }
+.pill.draft { background: #8e44ad; color: #fff; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+#bar button, .btn { font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 6px 11px; border-radius: 6px;
+  border: 1px solid #555; background: #222; color: #eee; cursor: pointer; }
+#bar button:hover, .btn:hover { border-color: var(--accent); color: #fff; }
+
+/* ── Panes ── */
+#main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); gap: 12px;
+  padding: 12px; min-height: 0; }
+.pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden; }
+.pane-hdr { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--line);
+  font-size: 13px; color: var(--muted); min-height: 44px; }
+.pane-hdr b { color: var(--ink); font-weight: 900; text-transform: uppercase; letter-spacing: .5px; font-size: 12px; }
+.pane-hdr .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-hdr a { color: var(--accent); text-decoration: none; }
+.pane-hdr .btn { background: #fff; color: var(--ink); border-color: #cfd4da; }
+.pane-hdr .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pane-hdr .btn.primary:hover { background: var(--accent-dark); }
+.pane-hdr .btn:disabled { opacity: .5; cursor: default; }
+
+/* Left: the browser frame */
+#frame-wrap { flex: 1 1 auto; min-height: 0; background: #23262b; position: relative; display: flex; align-items: center;
+  justify-content: center; overflow: auto; }
+#frame { max-width: 100%; max-height: 100%; object-fit: contain; display: block; cursor: zoom-in; }
+#frame.fit-width { max-height: none; width: 100%; cursor: zoom-out; }
+#frame-empty { color: #aab; font-size: 15px; text-align: center; padding: 30px; line-height: 1.6; }
+#frame-stale { position: absolute; top: 10px; left: 10px; font-size: 12px; font-weight: 700; padding: 4px 9px; border-radius: 6px;
+  background: rgba(0,0,0,.65); color: #fff; display: none; }
+#frame-stale.show { display: block; }
+
+/* Right: the thread */
+#msgs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 14px 14px 6px; background: #fafbfc; scroll-behavior: smooth; }
+.day { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .5px; text-transform: uppercase; margin: 10px 0 8px; }
+.m { display: flex; flex-direction: column; margin: 0 0 8px; max-width: 86%; }
+.m.user { align-self: flex-end; align-items: flex-end; margin-left: auto; }
+.m.assistant { align-self: flex-start; align-items: flex-start; }
+.m.system { align-self: center; align-items: center; max-width: 92%; }
+.bubble { padding: 9px 12px; border-radius: 14px; font-size: 14.5px; line-height: 1.42; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; }
+.m.user .bubble { background: var(--me); color: #fff; border-bottom-right-radius: 4px; }
+.m.assistant .bubble { background: var(--her); color: var(--ink); border-bottom-left-radius: 4px; }
+.m.system .bubble { background: var(--sys); color: #6b5a1e; font-size: 12.5px; border-radius: 8px; }
+.m.pending .bubble { opacity: .55; }
+.m .img { max-width: 100%; border-radius: 10px; border: 1px solid var(--line); margin-bottom: 4px; cursor: zoom-in; display: block; background: #fff; }
+.m .meta { font-size: 11px; color: var(--muted); margin: 3px 4px 0; }
+.m.ask .bubble { box-shadow: 0 0 0 2px var(--warn) inset; }
+#newpill { position: absolute; left: 50%; transform: translateX(-50%); bottom: 118px; background: var(--accent); color: #fff;
+  font-size: 12.5px; font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer; display: none; z-index: 2; }
+#newpill.show { display: block; }
+#chat-pane { position: relative; }
+#composer { flex: 0 0 auto; border-top: 1px solid var(--line); padding: 10px 12px 12px; background: #fff; }
+#composer.hot { background: #fff6ea; border-top-color: var(--warn); }
+#chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+#chips button { font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid #cfd4da; background: #fff; color: var(--ink); cursor: pointer; }
+#chips button:hover { border-color: var(--accent); color: var(--accent); }
+#row { display: flex; gap: 8px; align-items: flex-end; }
+#text { flex: 1; resize: none; min-height: 42px; max-height: 160px; padding: 10px 12px; font-family: inherit; font-size: 15px;
+  border: 2px solid #dfe3e8; border-radius: 10px; outline: none; background: #fff; }
+#text:focus { border-color: var(--accent); }
+#send { font-family: inherit; font-size: 15px; font-weight: 700; padding: 0 18px; height: 42px; border-radius: 10px; border: none;
+  background: var(--accent); color: #fff; cursor: pointer; }
+#send:hover { background: var(--accent-dark); }
+#send:disabled { background: #a9b2bb; cursor: default; }
+#hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+#hint.warn { color: var(--warn); font-weight: 700; }
+
+/* ── Login overlay ── */
+#login { position: fixed; inset: 0; background: #222121; display: flex; align-items: center; justify-content: center; z-index: 50; }
+#login form { width: min(380px, 92vw); background: #fff; border-radius: 12px; padding: 26px 24px 22px; text-align: center; }
+#login h1 { font-family: 'Bebas Neue', sans-serif; font-weight: normal; font-size: 34px; letter-spacing: 1px; color: #3b3b3b; }
+#login h1 span { color: var(--accent); }
+#login p { color: #888; font-size: 14px; margin: 4px 0 18px; }
+#login input { width: 100%; padding: 14px 16px; font-size: 22px; letter-spacing: 6px; text-align: center; border: 2px solid #ddd;
+  border-radius: 8px; outline: none; font-family: inherit; margin-bottom: 14px; }
+#login input:focus { border-color: var(--accent); }
+#login button { width: 100%; padding: 14px; font-size: 17px; font-weight: 600; background: var(--accent); color: #fff; border: none;
+  border-radius: 8px; cursor: pointer; font-family: inherit; }
+#login button:disabled { background: #999; }
+#login .err { color: var(--bad); font-size: 14px; margin-top: 12px; display: none; }
+#login .err.show { display: block; }
+
+/* ── Lightbox ── */
+#light { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; z-index: 60; cursor: zoom-out; overflow: auto; }
+#light.show { display: flex; }
+#light img { max-width: 96vw; max-height: 96vh; display: block; }
+
+/* ── Always side by side (Lance 2026-11-03: "the 2 will need to be side by side, not stacked"). The split is
+   draggable (#splitter) and remembered; narrow screens just get thinner columns, never a stack. ── */
+#main { grid-template-columns: minmax(0, var(--split, 58fr)) 10px minmax(0, 1fr); gap: 0; }
+#splitter { cursor: col-resize; position: relative; }
+#splitter::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: var(--line); border-radius: 2px; }
+#splitter:hover::after, #splitter.drag::after { background: var(--accent); }
+body.dragging { cursor: col-resize; user-select: none; }
+body.dragging iframe, body.dragging img { pointer-events: none; }
+@media (max-width: 900px) {
+  #main { padding: 6px; }
+  #bar { gap: 8px; padding: 0 10px; }
+  #bar .title { font-size: 19px; }
+  #bar .hide-sm { display: none; }
+  .m { max-width: 94%; }
+  .bubble { font-size: 13.5px; padding: 7px 10px; }
+  .pane-hdr { padding: 6px 8px; min-height: 38px; font-size: 12px; }
+  #chips { gap: 4px; }
+  #chips button { font-size: 12px; padding: 4px 9px; }
+  #newpill { bottom: 110px; }
+}
+body.hide-browser #main { grid-template-columns: 1fr; }
+body.hide-browser #browser-pane, body.hide-browser #splitter { display: none; }
+</style>
+</head>
+<body>
+
+<div id="login">
+  <form id="login-form" autocomplete="off">
+    <h1>CORA <span>·</span> PERMITS</h1>
+    <p>The cockpit. Enter your PIN.</p>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••" autofocus>
+    <button id="pin-btn" type="submit">Open</button>
+    <div class="err" id="login-err">That PIN is not recognized.</div>
+  </form>
+</div>
+
+<header id="bar">
+  <img src="logo.png" alt="Plansman" class="hide-sm">
+  <div class="title">CORA <span>·</span> COCKPIT</div>
+  <div class="spacer"></div>
+  <span class="pill off" id="p-online">offline</span>
+  <span class="pill busy" id="p-busy" style="display:none">working</span>
+  <span class="pill wait" id="p-wait" style="display:none">needs you</span>
+  <span class="pill draft" id="p-draft" style="display:none">draft parked</span>
+  <button id="notify-btn" class="hide-sm" title="Desktop notification when Cora is waiting on you">Notify me</button>
+  <button id="toggle-browser" class="hide-sm">Hide browser</button>
+  <button id="logout">Sign out</button>
+</header>
+
+<main id="main">
+  <section class="pane" id="browser-pane">
+    <div class="pane-hdr">
+      <b>Her browser</b>
+      <span class="grow" id="frame-title">—</span>
+      <span id="frame-age"></span>
+      <button class="btn" id="fit-btn" title="Toggle fit">Fit</button>
+      <button class="btn primary" id="capture-btn">Capture now</button>
+    </div>
+    <div id="frame-wrap">
+      <div id="frame-stale">stale</div>
+      <div id="frame-empty">No portal open.<br>When Cora opens a city website it shows here, refreshed every few seconds.</div>
+      <img id="frame" alt="" style="display:none">
+    </div>
+  </section>
+
+  <div id="splitter" title="Drag to resize"></div>
+
+  <section class="pane" id="chat-pane">
+    <div class="pane-hdr">
+      <b>Conversation</b>
+      <span class="grow" id="chat-sub">the same thread as Telegram</span>
+      <span id="chat-count"></span>
+    </div>
+    <div id="msgs"></div>
+    <div id="newpill">new messages ↓</div>
+    <div id="composer">
+      <div id="chips">
+        <button data-say="ok">ok</button>
+        <button data-say="go">go</button>
+        <button data-say="send">send</button>
+        <button data-say="no">no</button>
+        <button data-say="what are you looking at?">what are you looking at?</button>
+      </div>
+      <div id="row">
+        <textarea id="text" rows="1" placeholder="Reply to Cora… (Enter sends, Shift+Enter = new line)"></textarea>
+        <button id="send">Send</button>
+      </div>
+      <div id="hint">Anything typed here reaches Cora exactly like a Telegram message — same words, same gates.</div>
+    </div>
+  </section>
+</main>
+
+<div id="light"><img id="light-img" alt=""></div>
+
+<script>
+(function () {
+  var SB_URL = "https://kwcoqoizrwqxpfrkwkfv.supabase.co/rest/v1";
+  var SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3Y29xb2l6cndxeHBmcmt3a2Z2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NzQxMjAsImV4cCI6MjA5MDE1MDEyMH0.UY0OW4BnbG0SRhxrgDGibqyKHsXrN9j-JJzx2KSMQzk";
+  var POLL_MS = 2000, POLL_HIDDEN_MS = 6000, ONLINE_SECS = 150, STALE_SECS = 20;
+  var TOKEN_KEY = "cora_portal_token";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var token = null, afterId = 0, frameVersion = -1, timer = null, inflight = false;
+  var seenKeys = {}, lastDay = "", pendingLocal = [], atBottom = true, wasWaiting = false, lastAssistantId = 0;
+  var capturedAt = null, heartbeatAt = null, fitWidth = false, notifyOn = false, failStreak = 0;
+
+  try { token = localStorage.getItem(TOKEN_KEY); } catch (e) {}
+
+  function rpc(name, body) {
+    return fetch(SB_URL + "/rpc/" + name, {
+      method: "POST",
+      headers: { "apikey": SB_ANON, "Authorization": "Bearer " + SB_ANON, "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); });
+  }
+
+  // ── Sign in ──
+  function showLogin(msg) {
+    $("login").style.display = "flex";
+    if (msg) { $("login-err").textContent = msg; $("login-err").classList.add("show"); }
+    setTimeout(function () { $("pin").focus(); }, 50);
+  }
+  function hideLogin() { $("login").style.display = "none"; }
+  $("login-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var pin = $("pin").value.trim();
+    if (!pin) return;
+    var b = $("pin-btn"); b.disabled = true; b.textContent = "Checking…";
+    $("login-err").classList.remove("show");
+    rpc("cora_portal_login", { p_pin: pin }).then(function (d) {
+      b.disabled = false; b.textContent = "Open"; $("pin").value = "";
+      if (!d || !d.ok) { $("login-err").textContent = "That PIN is not recognized."; $("login-err").classList.add("show"); return; }
+      token = d.token;
+      try { localStorage.setItem(TOKEN_KEY, token); } catch (err) {}
+      hideLogin(); start();
+    }).catch(function (err) {
+      b.disabled = false; b.textContent = "Open";
+      $("login-err").textContent = "Could not reach the relay (" + err.message + ")."; $("login-err").classList.add("show");
+    });
+  });
+  $("logout").addEventListener("click", function () {
+    var t = token; token = null; stop();
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    if (t) rpc("cora_portal_logout", { p_token: t }).catch(function () {});
+    afterId = 0; frameVersion = -1; seenKeys = {}; lastDay = ""; $("msgs").innerHTML = "";
+    showLogin();
+  });
+
+  // ── Polling ──
+  function start() { stop(); tick(); schedule(); }
+  function stop() { if (timer) { clearTimeout(timer); timer = null; } }
+  function schedule() { stop(); timer = setTimeout(function () { tick(); schedule(); }, document.hidden ? POLL_HIDDEN_MS : POLL_MS); }
+  document.addEventListener("visibilitychange", function () { if (token) { if (!document.hidden) { tick(); } schedule(); } });
+
+  function tick() {
+    if (!token || inflight) return;
+    inflight = true;
+    rpc("cora_portal_read", { p_token: token, p_after_id: afterId, p_frame_version: frameVersion, p_limit: 150 })
+      .then(function (d) {
+        inflight = false; failStreak = 0;
+        if (!d || !d.ok) { token = null; try { localStorage.removeItem(TOKEN_KEY); } catch (e) {} stop(); showLogin("Signed out — enter the PIN again."); return; }
+        applyMessages(d.messages || []);
+        applyLive(d.live, d.now);
+        $("chat-sub").textContent = "the same thread as Telegram";
+      })
+      .catch(function (err) {
+        inflight = false; failStreak++;
+        if (failStreak >= 3) { $("chat-sub").textContent = "relay unreachable (" + err.message + ") — retrying"; setOnline(false); }
+      });
+  }
+
+  // ── Messages ──
+  function dayLabel(d) {
+    var today = new Date(); var y = new Date(); y.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return "Today";
+    if (d.toDateString() === y.toDateString()) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+  function hhmm(d) { return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }); }
+  function isAsk(text) { return /^\s*(❓|👀)/.test(text || ""); }
+
+  function applyMessages(list) {
+    if (!list.length) return;
+    var box = $("msgs");
+    var wasAtBottom = atBottom;
+    var newAssistant = false, newAsk = false;
+    list.forEach(function (m) {
+      if (m.id <= afterId) return;
+      afterId = m.id;
+      var d = new Date(m.ts);
+      var label = dayLabel(d);
+      if (label !== lastDay) { lastDay = label; var dl = document.createElement("div"); dl.className = "day"; dl.textContent = label; box.appendChild(dl); }
+      var el = document.createElement("div");
+      el.className = "m " + (m.role === "user" ? "user" : m.role === "system" ? "system" : "assistant");
+      if (m.role !== "user" && isAsk(m.content)) { el.className += " ask"; newAsk = true; }
+      if (m.image) {
+        var im = document.createElement("img"); im.className = "img"; im.src = m.image; im.alt = "screenshot";
+        im.addEventListener("click", function () { openLight(m.image); });
+        el.appendChild(im);
+      }
+      if (m.content && !(m.image && /^(📷\s*)?screenshot$/i.test(m.content))) {
+        var b = document.createElement("div"); b.className = "bubble"; b.textContent = m.content; el.appendChild(b);
+      }
+      var meta = document.createElement("div"); meta.className = "meta";
+      meta.textContent = (m.role === "user" ? "Lance" : m.role === "system" ? "system" : "Cora") + " · " + hhmm(d);
+      el.appendChild(meta);
+      box.appendChild(el);
+      if (m.role === "user") reconcilePending(m.content);
+      if (m.role === "assistant") { newAssistant = true; lastAssistantId = m.id; }
+    });
+    $("chat-count").textContent = "";
+    if (wasAtBottom || list.length > 50) scrollBottom(); else $("newpill").classList.add("show");
+    if ((newAssistant && document.hidden) || newAsk) notify(newAsk ? "Cora is asking you something" : "Cora replied");
+  }
+  function scrollBottom() { var box = $("msgs"); box.scrollTop = box.scrollHeight; atBottom = true; $("newpill").classList.remove("show"); }
+  $("msgs").addEventListener("scroll", function () {
+    var box = $("msgs"); atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+    if (atBottom) $("newpill").classList.remove("show");
+  });
+  $("newpill").addEventListener("click", scrollBottom);
+
+  // A reply typed here shows at once (faded) and firms up when Cora's record of it comes back down.
+  function addPending(text) {
+    var box = $("msgs");
+    var el = document.createElement("div"); el.className = "m user pending";
+    var b = document.createElement("div"); b.className = "bubble"; b.textContent = text; el.appendChild(b);
+    var meta = document.createElement("div"); meta.className = "meta"; meta.textContent = "Lance · sending…"; el.appendChild(meta);
+    box.appendChild(el); pendingLocal.push({ text: text, el: el, at: Date.now() }); scrollBottom();
+  }
+  function reconcilePending(text) {
+    for (var i = 0; i < pendingLocal.length; i++) {
+      if (pendingLocal[i].text.trim() === (text || "").trim()) { pendingLocal[i].el.remove(); pendingLocal.splice(i, 1); return; }
+    }
+  }
+  setInterval(function () {   // a pending bubble older than 40 s stays, but says so
+    pendingLocal.forEach(function (p) { if (Date.now() - p.at > 40000) p.el.querySelector(".meta").textContent = "Lance · not confirmed yet — is Cora running?"; });
+  }, 5000);
+
+  // ── Composer ──
+  function send(text) {
+    text = (text || "").trim();
+    if (!text || !token) return;
+    $("send").disabled = true;
+    rpc("cora_portal_send", { p_token: token, p_text: text, p_kind: "message" }).then(function (d) {
+      $("send").disabled = false;
+      if (!d || !d.ok) { $("hint").textContent = "Not sent (" + ((d && d.error) || "signed out") + ")."; $("hint").classList.add("warn"); return; }
+      $("text").value = ""; autosize(); addPending(text); $("text").focus();
+    }).catch(function (err) { $("send").disabled = false; $("hint").textContent = "Not sent: " + err.message; $("hint").classList.add("warn"); });
+  }
+  $("send").addEventListener("click", function () { send($("text").value); });
+  $("text").addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send($("text").value); } });
+  function autosize() { var t = $("text"); t.style.height = "auto"; t.style.height = Math.min(160, t.scrollHeight) + "px"; }
+  $("text").addEventListener("input", autosize);
+  Array.prototype.forEach.call(document.querySelectorAll("#chips button"), function (b) {
+    b.addEventListener("click", function () { send(b.getAttribute("data-say")); });
+  });
+
+  // ── Live: frame + presence ──
+  function setOnline(on) { var p = $("p-online"); p.className = "pill " + (on ? "on" : "off"); p.textContent = on ? "Cora online" : "offline"; }
+  function applyLive(live, now) {
+    if (!live) { setOnline(false); return; }
+    var serverNow = now ? new Date(now).getTime() : Date.now();
+    heartbeatAt = live.heartbeat_at ? new Date(live.heartbeat_at).getTime() : null;
+    var online = heartbeatAt && (serverNow - heartbeatAt) / 1000 < ONLINE_SECS;
+    setOnline(!!online);
+    $("p-busy").style.display = online && live.busy ? "" : "none";
+    $("p-wait").style.display = online && live.waiting ? "" : "none";
+    $("p-draft").style.display = live.pending_draft ? "" : "none";
+    var comp = $("composer"), hint = $("hint");
+    if (online && live.waiting) {
+      comp.classList.add("hot"); hint.classList.add("warn");
+      hint.textContent = "Cora is waiting for your answer — your next message goes straight to her question.";
+      if (!wasWaiting) notify("Cora is waiting on you");
+    } else if (live.pending_draft) {
+      comp.classList.remove("hot"); hint.classList.add("warn");
+      hint.textContent = "A client email is parked — type send to release it, no to drop it.";
+    } else {
+      comp.classList.remove("hot"); hint.classList.remove("warn");
+      hint.textContent = "Anything typed here reaches Cora exactly like a Telegram message — same words, same gates.";
+    }
+    wasWaiting = !!(online && live.waiting);
+    document.title = (online && live.waiting ? "● " : "") + "Cora — Plansman";
+
+    if (live.frame) {
+      $("frame").src = live.frame; $("frame").style.display = ""; $("frame-empty").style.display = "none";
+      frameVersion = live.frame_version;
+    }
+    if (live.frame_version !== undefined && live.frame_version !== null) frameVersion = live.frame_version;
+    capturedAt = live.captured_at ? new Date(live.captured_at).getTime() : null;
+    var t = (live.city ? live.city.replace(/_/g, " ") + " — " : "") + (live.title || "");
+    if (live.url) {
+      var short = live.url.replace(/^https?:\/\//, "").slice(0, 90);
+      $("frame-title").innerHTML = ""; var sp = document.createElement("span"); sp.textContent = t ? t + "  " : "";
+      var a = document.createElement("a"); a.href = live.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = short;
+      $("frame-title").appendChild(sp); $("frame-title").appendChild(a);
+    } else { $("frame-title").textContent = t || "—"; }
+    if (live.note && !live.frame && frameVersion <= 0) { $("frame-empty").style.display = ""; }
+    $("capture-btn").disabled = !online;
+    renderAge(serverNow);
+  }
+  function renderAge(serverNow) {
+    serverNow = serverNow || Date.now();
+    if (!capturedAt) { $("frame-age").textContent = ""; $("frame-stale").classList.remove("show"); return; }
+    var s = Math.max(0, Math.round((serverNow - capturedAt) / 1000));
+    $("frame-age").textContent = s < 5 ? "live" : s < 60 ? s + "s ago" : s < 3600 ? Math.round(s / 60) + " min ago" : Math.round(s / 3600) + " h ago";
+    var stale = s > STALE_SECS;
+    $("frame-stale").classList.toggle("show", stale);
+    $("frame-stale").textContent = stale ? "last capture " + $("frame-age").textContent : "";
+  }
+  setInterval(function () { renderAge(); }, 1000);
+
+  $("capture-btn").addEventListener("click", function () {
+    if (!token) return;
+    var b = $("capture-btn"); b.disabled = true; b.textContent = "Capturing…";
+    rpc("cora_portal_send", { p_token: token, p_text: "", p_kind: "capture" }).catch(function () {})
+      .then(function () { setTimeout(function () { b.disabled = false; b.textContent = "Capture now"; }, 2500); });
+  });
+  $("fit-btn").addEventListener("click", function () { fitWidth = !fitWidth; $("frame").classList.toggle("fit-width", fitWidth); $("fit-btn").textContent = fitWidth ? "Fit screen" : "Fit"; });
+  $("frame").addEventListener("click", function () { if ($("frame").src) openLight($("frame").src); });
+  $("toggle-browser").addEventListener("click", function () {
+    var hidden = document.body.classList.toggle("hide-browser");
+    $("toggle-browser").textContent = hidden ? "Show browser" : "Hide browser";
+  });
+
+  // ── Draggable split between the two panes (remembered per browser) ──
+  (function () {
+    var main = $("main"), sp = $("splitter"), dragging = false;
+    function setSplit(px) {
+      var w = main.clientWidth - 10, min = 240;
+      px = Math.max(min, Math.min(w - min, px));
+      main.style.setProperty("--split", px + "px");
+      try { localStorage.setItem("cora_portal_split", String(Math.round(px / w * 1000) / 1000)); } catch (e) {}
+    }
+    try { var f = parseFloat(localStorage.getItem("cora_portal_split")); if (f > 0 && f < 1) main.style.setProperty("--split", (f * 100) + "%"); } catch (e) {}
+    function move(x) { setSplit(x - main.getBoundingClientRect().left - main.clientLeft); }
+    sp.addEventListener("mousedown", function (e) { dragging = true; sp.classList.add("drag"); document.body.classList.add("dragging"); e.preventDefault(); });
+    window.addEventListener("mousemove", function (e) { if (dragging) move(e.clientX); });
+    window.addEventListener("mouseup", function () { if (dragging) { dragging = false; sp.classList.remove("drag"); document.body.classList.remove("dragging"); } });
+    sp.addEventListener("touchstart", function (e) { dragging = true; sp.classList.add("drag"); }, { passive: true });
+    window.addEventListener("touchmove", function (e) { if (dragging && e.touches[0]) move(e.touches[0].clientX); }, { passive: true });
+    window.addEventListener("touchend", function () { dragging = false; sp.classList.remove("drag"); });
+    sp.addEventListener("dblclick", function () { main.style.removeProperty("--split"); try { localStorage.removeItem("cora_portal_split"); } catch (e) {} });
+  })();
+
+  // ── Lightbox ──
+  function openLight(src) { $("light-img").src = src; $("light").classList.add("show"); }
+  $("light").addEventListener("click", function () { $("light").classList.remove("show"); $("light-img").src = ""; });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") $("light").classList.remove("show"); });
+
+  // ── Desktop notifications (opt-in; only when Cora needs Lance or replies while the tab is hidden) ──
+  function notify(text) {
+    if (!notifyOn || !("Notification" in window) || Notification.permission !== "granted") return;
+    try { var n = new Notification("Cora", { body: text, tag: "cora-cockpit", icon: "logo.png" }); n.onclick = function () { window.focus(); n.close(); }; } catch (e) {}
+  }
+  $("notify-btn").addEventListener("click", function () {
+    if (!("Notification" in window)) { $("notify-btn").textContent = "No notifications here"; return; }
+    Notification.requestPermission().then(function (p) {
+      notifyOn = (p === "granted"); $("notify-btn").textContent = notifyOn ? "Notifying ✓" : "Notifications blocked";
+      try { localStorage.setItem("cora_portal_notify", notifyOn ? "1" : "0"); } catch (e) {}
+    });
+  });
+  try { if (localStorage.getItem("cora_portal_notify") === "1" && Notification.permission === "granted") { notifyOn = true; $("notify-btn").textContent = "Notifying ✓"; } } catch (e) {}
+
+  // ── Boot ──
+  if (token) { hideLogin(); start(); } else { showLogin(); }
+})();
+</script>
+</body>
+</html>
