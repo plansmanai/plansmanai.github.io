@@ -367,7 +367,8 @@ body.hide-browser #browser-pane, body.hide-browser #splitter { display: none; }
     document.title = (online && live.waiting ? "● " : "") + "Cora — Plansman";
 
     if (live.frame) {
-      $("frame").src = live.frame; $("frame").style.display = ""; $("frame-empty").style.display = "none";
+      if ($("frame").getAttribute("src") !== live.frame) $("frame").src = live.frame;
+      $("frame").style.display = ""; $("frame-empty").style.display = "none";
       frameVersion = live.frame_version;
     }
     if (live.frame_version !== undefined && live.frame_version !== null) frameVersion = live.frame_version;
@@ -402,6 +403,13 @@ body.hide-browser #browser-pane, body.hide-browser #splitter { display: none; }
   });
   $("fit-btn").addEventListener("click", function () { fitWidth = !fitWidth; $("frame").classList.toggle("fit-width", fitWidth); $("fit-btn").textContent = fitWidth ? "Fit screen" : "Fit"; });
   $("frame").addEventListener("click", function () { if ($("frame").src) openLight($("frame").src); });
+  // Frames are signed Storage URLs now (2026-11-04); one that has expired while Cora was down shows a note, not a broken icon.
+  $("frame").addEventListener("error", function () {
+    if (!$("frame").src || $("frame").src.indexOf("http") !== 0) return;
+    $("frame").style.display = "none"; $("frame").removeAttribute("src");
+    $("frame-empty").textContent = "Her last frame has expired. It refreshes the next time she is working.";
+    $("frame-empty").style.display = "";
+  });
 
   // ── Draggable split between the two panes (remembered per browser) ──
   (function () {
