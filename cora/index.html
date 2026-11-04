@@ -276,6 +276,7 @@ body.hide-browser #browser-pane, body.hide-browser #splitter { display: none; }
     list.forEach(function (m) {
       if (m.id <= afterId) return;
       afterId = m.id;
+      if (m.role === "system") return;   // internal instructions to the model — not part of the Telegram thread
       var d = new Date(m.ts);
       var label = dayLabel(d);
       if (label !== lastDay) { lastDay = label; var dl = document.createElement("div"); dl.className = "day"; dl.textContent = label; box.appendChild(dl); }
