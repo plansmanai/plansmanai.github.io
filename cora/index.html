@@ -88,8 +88,8 @@ body { border-top: 3px solid var(--accent); font-family: 'Lato', "Helvetica Neue
   background: var(--accent); color: #fff; cursor: pointer; }
 #send:hover { background: var(--accent-dark); }
 #send:disabled { background: #a9b2bb; cursor: default; }
-#hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
-#hint.warn { color: var(--warn); font-weight: 700; }
+#hint { display: none; font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+#hint.warn { display: block; color: var(--warn); font-weight: 700; }
 
 /* ── Login overlay ── */
 #login { position: fixed; inset: 0; background: #222121; display: flex; align-items: center; justify-content: center; z-index: 50; }
@@ -175,7 +175,7 @@ body.hide-browser #browser-pane, body.hide-browser #splitter { display: none; }
         <textarea id="text" rows="1" placeholder="Reply to Cora… (Enter sends, Shift+Enter = new line)"></textarea>
         <button id="send">Send</button>
       </div>
-      <div id="hint">Anything typed here reaches Cora exactly like a Telegram message — same words, same gates.</div>
+      <div id="hint"></div>
     </div>
   </section>
 </main>
@@ -352,15 +352,15 @@ body.hide-browser #browser-pane, body.hide-browser #splitter { display: none; }
     if (online && live.busy) $("chat-sub").textContent = "Cora is working…";
     var comp = $("composer"), hint = $("hint");
     if (online && live.waiting) {
-      comp.classList.add("hot"); hint.classList.add("warn");
-      hint.textContent = "Cora is waiting for your answer — your next message goes straight to her question.";
+      comp.classList.add("hot"); hint.classList.remove("warn"); hint.textContent = "";
+      $("text").placeholder = "Cora is waiting for your answer…";
       if (!wasWaiting) notify("Cora is waiting on you");
     } else if (live.pending_draft) {
-      comp.classList.remove("hot"); hint.classList.add("warn");
-      hint.textContent = "A client email is parked — type send to release it, no to drop it.";
+      comp.classList.remove("hot"); hint.classList.remove("warn"); hint.textContent = "";
+      $("text").placeholder = "A client email is parked — send releases it, no drops it";
     } else {
-      comp.classList.remove("hot"); hint.classList.remove("warn");
-      hint.textContent = "Anything typed here reaches Cora exactly like a Telegram message — same words, same gates.";
+      comp.classList.remove("hot"); hint.classList.remove("warn"); hint.textContent = "";
+      $("text").placeholder = "Reply to Cora… (Enter sends, Shift+Enter = new line)";
     }
     wasWaiting = !!(online && live.waiting);
     document.title = (online && live.waiting ? "● " : "") + "Cora — Plansman";
