@@ -11,11 +11,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap">
 <style>
-/* The page a client signs on (Lance, 26 Nov 2026: "They get a link to our site and they sign with their finger on their
-   phone and it saves that signature to the form where it should go"). It is plansman.com's own paper and ink, on a
-   phone first: the document to read, then one panel to sign in. It can do four things, each only with the link's own
-   token: open, read a page, sign, and keep the signed copy (db/094). The source is app/sign.html in P4;
-   app/build_sign.py writes it into the plansman.com site as /sign/. */
+/* The page a document is filled in and signed on (Lance, 26 Nov 2026: "They get a link to our site and they sign with
+   their finger on their phone and it saves that signature to the form where it should go"; 27 Nov 2026, after Jake sent
+   him to a PDF app for his insurance renewal: "Can we make this more useful ... anticipate usefulness"). It is
+   plansman.com's own paper and ink, on a phone first: the document to read, with a box on it wherever something goes
+   (type in it, tick it, tap it to sign or date it), a way to put text, a tick, the date or the signature anywhere else
+   when the form is the signer's own to complete, then one panel to sign in. It can do four things, each only with the
+   link's own token: open, read a page, finish, and keep the finished copy (db/094, db/098). The source is
+   app/sign.html in P4; app/build_sign.py writes it into the plansman.com site as /sign/. */
 :root { --bg: #f4f3ef; --paper: #ffffff; --fg: #121311; --muted: #6d6c66; --rule: #d9d8d2; --mark: #c8501e;
   --sans: "Instrument Sans", "Helvetica Neue", Arial, sans-serif; --serif: "Instrument Serif", Georgia, "Times New Roman", serif; }
 *, *::before, *::after { box-sizing: border-box; }
@@ -29,30 +32,60 @@ h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(1.7rem, 6vw, 
 .sub { color: var(--muted); margin: 0 0 18px; }
 .note { border: 1px solid var(--fg); padding: 12px 14px; margin: 0 0 18px; background: var(--paper); }
 .note.quiet { border-color: var(--rule); color: var(--muted); }
+.note a { color: inherit; }
 .lbl { font-size: .7rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 26px 0 8px; }
+#pages { position: relative; }
 .pg { position: relative; background: var(--paper); border: 1px solid var(--rule); margin: 0 0 12px; overflow: hidden; }
-.pg img { display: block; width: 100%; height: auto; }
+.pg img.sheet { display: block; width: 100%; height: auto; -webkit-user-select: none; user-select: none; }
 .pg .wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .8rem; }
+.pg.aim { cursor: crosshair; outline: 2px solid var(--mark); outline-offset: -2px; }
 .spot { position: absolute; border: 1.5px solid var(--mark); background: rgba(200, 80, 30, .09); display: flex; align-items: flex-end; overflow: hidden; cursor: pointer; }
 .spot i { position: absolute; left: 0; top: 0; font-style: normal; font-size: 9px; line-height: 1; letter-spacing: .08em; text-transform: uppercase; background: var(--mark); color: #fff; padding: 2px 4px; white-space: nowrap; }
 .spot img { position: absolute; left: 0; bottom: 0; height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: left bottom; }
 .spot span { font-family: Helvetica, Arial, sans-serif; color: #000; padding: 0 0 1px 2px; white-space: nowrap; line-height: 1; }
 .spot.done { border-color: transparent; background: none; } .spot.done i { display: none; }
+/* a box to type in: a quiet tint on the form's own line, with no tag on it (the form prints what the line is for) */
+.spot.k-text { border-width: 1px; border-color: rgba(200, 80, 30, .55); background: rgba(200, 80, 30, .07); }
+.spot.k-text.done { border-color: rgba(200, 80, 30, .25); background: rgba(200, 80, 30, .03); }
+.spot.k-text.need:not(.done) { border-width: 2px; border-color: var(--mark); }
+/* a box to tick: small on the paper, so the finger gets a larger place to land */
+.spot.k-check { overflow: visible; align-items: center; justify-content: center; border-width: 1px; }
+.spot.k-check::before { content: ''; position: absolute; inset: -9px; }
+.spot.k-check span { padding: 0; font-weight: 700; }
+.spot.k-check.done { border-color: rgba(200, 80, 30, .35); }
+/* a place that is the signer's to use or leave: dashed until it is used */
+.spot.opt:not(.done) { border-style: dashed; background: rgba(200, 80, 30, .04); }
+.spot.opt:not(.done) i { background: none; color: var(--mark); padding: 1px 3px; font-size: 8px; }
+/* something the signer put on the page themselves: it can be dragged, and taken off */
+.spot.mine { overflow: visible; touch-action: none; border-style: dotted; }
+.spot.mine.done { border-color: rgba(18, 19, 17, .28); border-style: dotted; }
+.spot.mine b { position: absolute; right: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: var(--fg); color: #fff; font: 600 13px/22px var(--sans); text-align: center; }
+#ed { position: absolute; z-index: 6; height: 40px; padding: 6px 10px; font: inherit; font-size: 16px; color: var(--fg); background: #fff; border: 2px solid var(--fg); border-radius: 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+#tools { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; margin: 0 0 6px; background: var(--bg); }
+#tools span { font-size: .7rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+#tools button { background: var(--paper); border: 1px solid var(--fg); color: var(--fg); font: inherit; font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; padding: 9px 12px; cursor: pointer; border-radius: 0; }
+#tools button.on { background: var(--fg); color: var(--bg); }
+#tools em { flex-basis: 100%; font-style: normal; font-size: .86rem; color: var(--mark); }
 #panel { background: var(--paper); border: 1px solid var(--fg); padding: 16px 16px 18px; margin-top: 22px; }
 #panel h2 { font-family: var(--sans); font-weight: 600; font-size: 1.02rem; margin: 0 0 4px; }
 #panel p { margin: 0 0 12px; color: var(--muted); font-size: .9rem; }
-#pad-wrap { position: relative; border: 1px solid var(--fg); background: #fff; height: 190px; touch-action: none; }
-#pad { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-#pad-wrap::after { content: ''; position: absolute; left: 16px; right: 16px; bottom: 44px; border-bottom: 1px solid var(--rule); pointer-events: none; }
-#pad-hint { position: absolute; left: 18px; bottom: 16px; color: var(--muted); font-size: .78rem; pointer-events: none; }
-#clear { position: absolute; right: 8px; top: 8px; background: #fff; border: 1px solid var(--rule); color: var(--fg); font: inherit; font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; padding: 7px 10px; cursor: pointer; }
+.pad-wrap { position: relative; border: 1px solid var(--fg); background: #fff; height: 190px; touch-action: none; }
+.pad-wrap.small { height: 120px; max-width: 320px; }
+.pad-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.pad-wrap::after { content: ''; position: absolute; left: 16px; right: 16px; bottom: 44px; border-bottom: 1px solid var(--rule); pointer-events: none; }
+.pad-wrap.small::after { bottom: 30px; }
+.pad-wrap .hint { position: absolute; left: 18px; bottom: 16px; color: var(--muted); font-size: .78rem; pointer-events: none; }
+.pad-wrap.small .hint { bottom: 8px; }
+.pad-wrap button { position: absolute; right: 8px; top: 8px; background: #fff; border: 1px solid var(--rule); color: var(--fg); font: inherit; font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; padding: 7px 10px; cursor: pointer; }
 label.f { display: block; margin: 16px 0 0; font-size: .7rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
 input[type=text] { display: block; width: 100%; margin-top: 6px; padding: 12px 12px; font: inherit; font-size: 16px; color: var(--fg); background: #fff; border: 1px solid var(--fg); border-radius: 0; }
 label.c { display: flex; gap: 12px; align-items: flex-start; margin: 16px 0 0; font-size: .92rem; cursor: pointer; }
 label.c input { flex: none; width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--fg); }
-button.go { display: block; width: 100%; margin-top: 18px; padding: 16px 20px; background: var(--fg); color: var(--bg); border: 1px solid var(--fg); font: inherit; font-size: .8rem; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; cursor: pointer; border-radius: 0; }
+button.go { display: block; width: 100%; margin-top: 18px; padding: 16px 20px; background: var(--fg); color: var(--bg); border: 1px solid var(--fg); font: inherit; font-size: .8rem; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; cursor: pointer; border-radius: 0; text-align: center; text-decoration: none; }
 button.go[disabled] { opacity: .35; cursor: default; }
-button.sec { background: none; color: var(--fg); }
+button.sec, a.go { background: none; color: var(--fg); }
+a.go { display: block; width: 100%; margin-top: 12px; padding: 16px 20px; border: 1px solid var(--fg); font-size: .8rem; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; text-align: center; text-decoration: none; }
+#left { margin: 14px 0 0; font-size: .9rem; color: var(--muted); }
 #msg { margin: 12px 0 0; min-height: 1.4em; font-size: .9rem; color: var(--mark); }
 .fine { margin: 14px 0 0; color: var(--muted); font-size: .78rem; }
 footer { max-width: 860px; margin: 0 auto; padding: 0 16px calc(env(safe-area-inset-bottom, 0px) + 28px); color: var(--muted); font-size: .72rem; letter-spacing: .22em; text-align: center; }
@@ -70,17 +103,28 @@ footer a { color: inherit; text-decoration: none; }
     <h1 id="title"></h1>
     <p class="sub" id="sub"></p>
     <div id="done" class="note" hidden></div>
+    <div id="how" class="note quiet" hidden></div>
     <div class="lbl" id="doc-lbl">The document</div>
-    <div id="pages"></div>
+    <div id="sheet">
+    <div id="tools" hidden><span>Add</span><button type="button" data-add="text">Text</button><button type="button" data-add="check">Tick</button><button type="button" data-add="date">Date</button><button type="button" data-add="signature">Signature</button><em id="aim" hidden>Now tap the page where it goes.</em></div>
+    <div id="pages"><input id="ed" type="text" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="next" maxlength="300" hidden></div>
+    </div>
     <div id="panel" hidden>
-      <h2>Sign here</h2>
-      <p>Draw your signature with your finger. It is placed on the document where the orange box is.</p>
-      <div id="pad-wrap"><canvas id="pad" aria-label="Draw your signature here"></canvas><span id="pad-hint">Sign above the line</span><button type="button" id="clear">Clear</button></div>
+      <div id="sig-part">
+        <h2>Your signature</h2>
+        <p id="sig-how">Draw your signature with your finger. It is placed on the document where the orange box is.</p>
+        <div class="pad-wrap" id="pad-wrap"><canvas id="pad" aria-label="Draw your signature here"></canvas><span class="hint" id="pad-hint">Sign above the line</span><button type="button" id="clear">Clear</button></div>
+      </div>
+      <div id="ini-part" hidden>
+        <h2 style="margin-top:18px">Your initials</h2>
+        <div class="pad-wrap small"><canvas id="ipad" aria-label="Draw your initials here"></canvas><span class="hint" id="ipad-hint">Initials</span><button type="button" id="iclear">Clear</button></div>
+      </div>
       <label class="f" for="name">Your full name<input type="text" id="name" autocomplete="name" autocapitalize="words" maxlength="120"></label>
-      <label class="c"><input type="checkbox" id="agree"><span>I have read this document. I agree to sign it electronically, and that the signature I drew here is my signature, with the same effect as one on paper.</span></label>
+      <label class="c"><input type="checkbox" id="agree"><span>I have read this document. I agree to complete and sign it electronically, and that what I entered and the signature I drew here are mine, with the same effect as on paper.</span></label>
+      <div id="left" role="status"></div>
       <button type="button" class="go" id="sign" disabled>Sign the document</button>
       <div id="msg" role="status"></div>
-      <p class="fine">Your signature is recorded with this document together with the time and the device it was signed on. You can save your signed copy here as soon as it is ready.</p>
+      <p class="fine" id="fine">Your signature is recorded with this document together with the time and the device it was signed on. You can save your signed copy here as soon as it is ready.</p>
     </div>
   </section>
 </main>
@@ -93,7 +137,11 @@ footer a { color: inherit; text-decoration: none; }
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   var token = (/[?&]t=([A-Za-z0-9_\-]{30,200})/.exec(location.search) || [])[1] || '';
-  var D = null, INK = '', shown = '';
+  var D = null, shown = '';
+  // WHAT HE HAS PUT ON THE FORM lives here, never only in the page's elements (the boxes are drawn again whenever the
+  // page is sized): VAL is what is typed or ticked in each box, by the box's number; ON the signature, initials and
+  // date places he tapped to use; ADD what he put on the page himself; MODE the kind he is about to place.
+  var VAL = {}, ON = {}, ADD = [], MODE = null, EDIT = null;
   function rpc(name, body) {
     return fetch(CFG.url + '/rest/v1/rpc/' + name, { method: 'POST', headers: { apikey: CFG.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
@@ -101,125 +149,317 @@ footer a { color: inherit; text-decoration: none; }
   function when(s) { try { return new Date(s).toLocaleString(undefined, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } }
   function today() { var d = new Date(); return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(); }
   function gone(text) { $('load').hidden = true; $('doc').hidden = true; $('gone').hidden = false; $('gone').innerHTML = text; }
+  function places() { return (D && D.places) || []; }
+  function live() { return !!D && D.state === 'ready'; }
+  function pageOf(n) { return ((D && D.pages) || []).filter(function (p) { return p.n === n; })[0] || { w: 612, h: 792, pt: 612 }; }
 
-  // ---- the document: each page as a picture, with a box where each thing goes
+  // ---- the document: each page as a picture, with a box wherever something goes
   function pages() {
     var key = D.state + '|' + D.pages.length;
     if (shown === key) return;
     shown = key;
-    $('pages').innerHTML = D.pages.map(function (p) {
-      return '<div class="pg" data-n="' + p.n + '" style="aspect-ratio: ' + p.w + ' / ' + p.h + '"><div class="wait">Page ' + p.n + '…</div></div>';
-    }).join('');
+    [].forEach.call(document.querySelectorAll('.pg'), function (el) { el.remove(); });
+    D.pages.forEach(function (p) {
+      var box = document.createElement('div');
+      box.className = 'pg'; box.setAttribute('data-n', p.n); box.style.aspectRatio = p.w + ' / ' + p.h;
+      box.innerHTML = '<div class="wait">Page ' + p.n + '…</div>';
+      $('pages').appendChild(box);
+    });
     D.pages.reduce(function (chain, p) {                    // one after another, so a long document does not ask for everything at once
       return chain.then(function () {
         return rpc('sign_page', { p_token: token, p_n: p.n }).then(function (r) {
           var box = document.querySelector('.pg[data-n="' + p.n + '"]');
           if (!box || !r || !r.ok) return;
           var img = new Image();
-          img.alt = 'Page ' + p.n; img.src = 'data:image/jpeg;base64,' + r.jpeg;
+          img.className = 'sheet'; img.alt = 'Page ' + p.n; img.draggable = false; img.src = 'data:image/jpeg;base64,' + r.jpeg;
           box.querySelector('.wait').remove(); box.insertBefore(img, box.firstChild);
         });
       });
     }, Promise.resolve()).catch(function () {});
     spots();
   }
+  var TAG = { signature: ['Sign here', 'Tap to sign'], initials: ['Initials', 'Tap to initial'], date: ['Date', 'Tap for date'], name: ['Name', 'Name'] };
+  function spotEl(p, attr, id) {
+    var box = document.querySelector('.pg[data-n="' + p.page + '"]');
+    if (!box) return null;
+    var el = document.createElement('div');
+    el.className = 'spot k-' + p.kind + (p.opt ? ' opt' : '') + (p.req ? ' need' : '') + (attr === 'data-a' ? ' mine' : '');
+    el.setAttribute(attr, id); el.setAttribute('data-kind', p.kind);
+    if (p.label) el.title = p.label;
+    el.style.left = (p.x * 100) + '%'; el.style.top = (p.y * 100) + '%'; el.style.width = (p.w * 100) + '%'; el.style.height = (p.h * 100) + '%';
+    if (TAG[p.kind] && attr === 'data-i') el.innerHTML = '<i>' + TAG[p.kind][p.opt ? 1 : 0] + '</i>';
+    if (attr === 'data-a') el.innerHTML = '<b data-x="' + id + '" aria-label="Take this off">×</b>';
+    box.appendChild(el);
+    return el;
+  }
   function spots() {
     [].forEach.call(document.querySelectorAll('.spot'), function (el) { el.remove(); });
-    (D.places || []).forEach(function (p) {
-      var box = document.querySelector('.pg[data-n="' + p.page + '"]');
-      if (!box) return;
-      var el = document.createElement('div');
-      el.className = 'spot'; el.setAttribute('data-kind', p.kind);
-      el.style.left = (p.x * 100) + '%'; el.style.top = (p.y * 100) + '%'; el.style.width = (p.w * 100) + '%'; el.style.height = (p.h * 100) + '%';
-      el.innerHTML = '<i>' + (p.kind === 'signature' ? 'Sign here' : p.kind === 'date' ? 'Date' : 'Name') + '</i>';
-      el.addEventListener('click', function () { $('panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-      box.appendChild(el);
-    });
+    places().forEach(function (p, i) { spotEl(p, 'data-i', i); });
+    ADD.forEach(function (a, i) { spotEl(a, 'data-a', i); });
     fill();
   }
-  function fill() {                                          // what he has drawn and typed, shown where it will go
+  // what a box holds now: a picture (the signature, the initials), words, a tick, or nothing yet
+  function holds(p, i, mine) {
+    if (p.kind === 'signature') return (mine || !p.opt || ON[i]) && SIG.ink ? { img: SIG.ink } : null;
+    if (p.kind === 'initials') return (mine || !p.opt || ON[i]) && INI.ink ? { img: INI.ink } : null;
+    if (p.kind === 'date') return mine ? { text: p.v || today() } : (!p.opt || ON[i]) ? { text: today() } : null;
+    if (p.kind === 'name') return $('name').value.trim() ? { text: $('name').value.trim() } : null;
+    if (p.kind === 'check') return (mine ? true : VAL[i]) ? { text: '✓', tick: true } : null;
+    var t = mine ? p.v : VAL[i];
+    return t ? { text: t } : null;
+  }
+  function fill() {                                          // what he has drawn, typed and ticked, shown where it will go
     [].forEach.call(document.querySelectorAll('.spot'), function (el) {
-      var kind = el.getAttribute('data-kind'), old = el.querySelector('img, span');
-      if (old) old.remove();
-      var h = el.getBoundingClientRect().height;
-      if (kind === 'signature' && INK) { var im = new Image(); im.src = INK; im.alt = ''; el.appendChild(im); }
-      else if (kind !== 'signature') {
-        var t = kind === 'date' ? (INK ? today() : '') : $('name').value.trim();
-        if (t) { var s = document.createElement('span'); s.textContent = t; s.style.fontSize = Math.max(7, h * 0.62) + 'px'; el.appendChild(s); }
+      var mine = el.hasAttribute('data-a'), i = +(el.getAttribute(mine ? 'data-a' : 'data-i')), p = mine ? ADD[i] : places()[i];
+      [].forEach.call(el.querySelectorAll('img, span'), function (x) { x.remove(); });
+      if (!p) return;
+      var h = holds(p, i, mine), r = el.getBoundingClientRect(), pg = el.parentNode.getBoundingClientRect(), per = pg.width / (pageOf(p.page).pt || 612);
+      if (h && h.img) { var im = new Image(); im.src = h.img; im.alt = ''; el.appendChild(im); }
+      else if (h) {
+        var s = document.createElement('span'), fs = h.tick ? r.height * 1.05 : Math.max(5 * per, Math.min(r.height * 0.72, 11 * per));
+        s.textContent = h.text; s.style.fontSize = fs + 'px'; el.appendChild(s);
+        while (!h.tick && s.offsetWidth > r.width - 2 && fs > 5 * per) { fs -= 0.5; s.style.fontSize = fs + 'px'; }      // long words are made smaller, as they will be on the paper
       }
-      el.classList.toggle('done', !!el.querySelector('img, span'));
+      el.classList.toggle('done', !!h);
     });
+    ready();
   }
 
-  // ---- the pad: a finger, a pen or a mouse; the ink is kept as a picture cut to what was drawn
-  var pad = $('pad'), ctx = pad.getContext('2d'), strokes = [], cur = null;
-  function size() {
-    var r = pad.getBoundingClientRect(), k = window.devicePixelRatio || 1;
-    if (!r.width) return;
-    pad.width = Math.round(r.width * k); pad.height = Math.round(r.height * k);
-    ctx.setTransform(k, 0, 0, k, 0, 0);
-    draw();
+  // ---- typing in a box: one input, laid over the box while he types, so the phone's keyboard brings it into view
+  var ed = $('ed');
+  function target(key) { return key.a != null ? ADD[key.a] : places()[key.i]; }
+  function edit(key) {
+    var el = document.querySelector(key.a != null ? '.spot[data-a="' + key.a + '"]' : '.spot[data-i="' + key.i + '"]'), p = target(key);
+    if (!el || !p) return;
+    var r = el.getBoundingClientRect(), host = $('pages').getBoundingClientRect(), wide = Math.min(host.width - 8, Math.max(r.width + 8, 240));
+    EDIT = key;
+    ed.hidden = false;
+    ed.style.width = wide + 'px';
+    ed.style.left = Math.max(4, Math.min(r.left - host.left - 4, host.width - wide - 4)) + 'px';
+    ed.style.top = (r.bottom - host.top - 36) + 'px';
+    ed.placeholder = p.label || 'Type here';
+    ed.value = (key.a != null ? p.v : VAL[key.i]) || '';
+    ed.focus();
   }
-  function line(c, pts, w) {
-    if (!pts.length) return;
-    c.lineWidth = w; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#111'; c.fillStyle = '#111';
-    if (pts.length === 1) { c.beginPath(); c.arc(pts[0][0], pts[0][1], w / 2, 0, 6.3); c.fill(); return; }
-    c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
-    for (var i = 1; i < pts.length - 1; i++) c.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
-    c.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); c.stroke();
+  function keep() {
+    if (!EDIT) return;
+    var v = ed.value.replace(/\s+/g, ' ').trim();
+    if (EDIT.a != null) { if (ADD[EDIT.a]) ADD[EDIT.a].v = v; } else if (v) VAL[EDIT.i] = v; else delete VAL[EDIT.i];
   }
-  function draw() {
-    var r = pad.getBoundingClientRect();
-    ctx.clearRect(0, 0, r.width, r.height);
-    strokes.forEach(function (s) { line(ctx, s, 2.6); });
+  function shut() {
+    if (!EDIT) return;
+    keep();
+    var was = EDIT;
+    EDIT = null; ed.hidden = true;
+    if (was.a != null && ADD[was.a] && !ADD[was.a].v) { ADD.splice(was.a, 1); spots(); return; }      // text he put on the page and left empty is not there
+    fill();
   }
-  function at(e) { var r = pad.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
-  function ink() {                                           // the picture that goes on the document: only what was drawn, on nothing
-    var pts = [].concat.apply([], strokes), long = 0;
-    strokes.forEach(function (s) { for (var i = 1; i < s.length; i++) long += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]); });
-    if (pts.length < 6 || long < 60) return '';              // a dot or a tick is not a signature
-    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
-    var x0 = Math.min.apply(null, xs) - 6, y0 = Math.min.apply(null, ys) - 6, w = Math.max.apply(null, xs) + 6 - x0, h = Math.max.apply(null, ys) + 6 - y0;
-    var k = Math.min(3, 900 / w), c = document.createElement('canvas');
-    c.width = Math.round(w * k); c.height = Math.round(h * k);
-    var g = c.getContext('2d'); g.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
-    strokes.forEach(function (s) { line(g, s, 2.6); });
-    return c.toDataURL('image/png');
-  }
-  function changed() { INK = ink(); $('pad-hint').hidden = strokes.length > 0; fill(); ready(); }
-  pad.addEventListener('pointerdown', function (e) {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
+  ed.addEventListener('input', keep);
+  ed.addEventListener('blur', function () { setTimeout(function () { if (document.activeElement !== ed) shut(); }, 0); });
+  ed.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
     e.preventDefault();
-    try { pad.setPointerCapture(e.pointerId); } catch (x) {}      // some browsers refuse it; drawing goes on without
-    cur = [at(e)]; strokes.push(cur); draw();
+    var was = EDIT, next = null;
+    if (was && was.i != null) places().forEach(function (p, i) { if (next == null && i > was.i && p.kind === 'text') next = i; });
+    keep(); EDIT = null; fill();
+    if (next != null) edit({ i: next }); else { ed.hidden = true; ed.blur(); }
   });
-  pad.addEventListener('pointermove', function (e) {
-    if (!cur) return;
-    e.preventDefault();
-    var all = e.getCoalescedEvents ? e.getCoalescedEvents() : [];      // every point of a fast stroke, where the browser gives them
-    (all.length ? all : [e]).forEach(function (x) { cur.push(at(x)); });
-    draw();
+
+  // ---- tapping the page: a box that is there, or (when he is adding something) the place it goes
+  var drag = null;
+  $('pages').addEventListener('click', function (e) {
+    if (!live()) return;
+    var t = e.target, x = t.closest ? t.closest('[data-x]') : null, el = t.closest ? t.closest('.spot') : null, pg = t.closest ? t.closest('.pg') : null;
+    if (t === ed) return;
+    if (drag && drag.moved) { drag = null; return; }
+    if (x) { ADD.splice(+x.getAttribute('data-x'), 1); spots(); return; }
+    if (MODE && pg && !el) { put(pg, e); return; }
+    if (!el) return;
+    var mine = el.hasAttribute('data-a'), i = +(el.getAttribute(mine ? 'data-a' : 'data-i')), p = mine ? ADD[i] : places()[i];
+    if (!p) return;
+    if (p.kind === 'text') { edit(mine ? { a: i } : { i: i }); return; }
+    if (mine) { if (p.kind === 'signature' && !SIG.ink) toPanel('Draw your signature below. It will show where you put it.'); return; }
+    if (p.kind === 'check') { if (VAL[i]) delete VAL[i]; else VAL[i] = true; fill(); return; }
+    if (p.kind === 'name') { $('name').focus(); return; }
+    if (p.opt) {
+      if (ON[i]) delete ON[i]; else ON[i] = true;
+      fill();
+      if (ON[i] && p.kind === 'signature' && !SIG.ink) toPanel('Draw your signature below. It will show on the line you tapped.');
+      if (ON[i] && p.kind === 'initials' && !INI.ink) toPanel('Draw your initials below. They will show where you tapped.');
+      return;
+    }
+    toPanel('');
   });
-  ['pointerup', 'pointercancel'].forEach(function (n) { pad.addEventListener(n, function () { if (cur) { cur = null; changed(); } }); });
-  $('clear').addEventListener('click', function () { strokes = []; cur = null; draw(); changed(); });
-  window.addEventListener('resize', function () { size(); fill(); });
-  $('name').addEventListener('input', function () { fill(); ready(); });
+  function toPanel(text) { $('msg').textContent = text; $('panel').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  // something of his own, put where he tapped: text and the date start at the tap and sit on it like writing on a line
+  function put(pg, e) {
+    var r = pg.getBoundingClientRect(), n = +pg.getAttribute('data-n'), P = pageOf(n), W = P.pt || 612, H = W * P.h / P.w;
+    var x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height, a;
+    if (MODE === 'check') a = { kind: 'check', w: 12 / W, h: 12 / H, x: x - 6 / W, y: y - 6 / H, v: true };
+    else if (MODE === 'signature') a = { kind: 'signature', w: 0.34, h: 36 / H, x: x, y: y - 30 / H, v: true };
+    else if (MODE === 'date') a = { kind: 'date', w: 0.17, h: 17 / H, x: x, y: y - 13 / H, v: today() };
+    else a = { kind: 'text', w: 0.36, h: 17 / H, x: x, y: y - 13 / H, v: '' };
+    a.page = n;
+    a.x = Math.max(0, Math.min(a.x, 0.995 - Math.min(a.w, 0.9))); a.w = Math.min(a.w, 0.995 - a.x);
+    a.y = Math.max(0, Math.min(a.y, 0.995 - a.h));
+    ADD.push(a);
+    var kind = MODE;
+    if (kind !== 'check') mode(null);                       // ticks come several at a time; the rest one at a time
+    spots();
+    if (kind === 'text') edit({ a: ADD.length - 1 });
+    if (kind === 'signature' && !SIG.ink) toPanel('Draw your signature below. It will show where you put it.');
+  }
+  function mode(m) {
+    MODE = m;
+    [].forEach.call(document.querySelectorAll('#tools button'), function (b) { b.classList.toggle('on', b.getAttribute('data-add') === m); });
+    [].forEach.call(document.querySelectorAll('.pg'), function (p) { p.classList.toggle('aim', !!m); });
+    $('aim').hidden = !m;
+    $('aim').textContent = m === 'check' ? 'Tap each box to tick. Tap Tick again when you are done.' : 'Now tap the page where it goes.';
+  }
+  $('tools').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-add]') : null;
+    if (b) mode(MODE === b.getAttribute('data-add') ? null : b.getAttribute('data-add'));
+  });
+  // what he put on the page himself can be moved with a finger
+  $('pages').addEventListener('pointerdown', function (e) {
+    var el = e.target.closest ? e.target.closest('.spot.mine') : null;
+    if (!el || !live() || (e.target.closest && e.target.closest('[data-x]'))) return;
+    var a = ADD[+el.getAttribute('data-a')];
+    if (a) drag = { el: el, a: a, x: e.clientX, y: e.clientY, ax: a.x, ay: a.y, moved: false };
+  });
+  window.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 7) return;
+    if (!drag.moved && EDIT) shut();
+    drag.moved = true;
+    var r = drag.el.parentNode.getBoundingClientRect();
+    drag.a.x = Math.max(0, Math.min(drag.ax + dx / r.width, 0.995 - drag.a.w));
+    drag.a.y = Math.max(0, Math.min(drag.ay + dy / r.height, 0.995 - drag.a.h));
+    drag.el.style.left = (drag.a.x * 100) + '%'; drag.el.style.top = (drag.a.y * 100) + '%';
+  });
+  ['pointerup', 'pointercancel'].forEach(function (n) { window.addEventListener(n, function () { if (drag && !drag.moved) drag = null; else if (drag) setTimeout(function () { drag = null; }, 60); }); });
+
+  // ---- a pad: a finger, a pen or a mouse; the ink is kept as a picture cut to what was drawn
+  function Pad(canvas, hint, clear, least) {
+    var ctx = canvas.getContext('2d'), me = { strokes: [], ink: '' }, cur = null;
+    function line(c, pts, w) {
+      if (!pts.length) return;
+      c.lineWidth = w; c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#111'; c.fillStyle = '#111';
+      if (pts.length === 1) { c.beginPath(); c.arc(pts[0][0], pts[0][1], w / 2, 0, 6.3); c.fill(); return; }
+      c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+      for (var i = 1; i < pts.length - 1; i++) c.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+      c.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); c.stroke();
+    }
+    function draw() { var r = canvas.getBoundingClientRect(); ctx.clearRect(0, 0, r.width, r.height); me.strokes.forEach(function (s) { line(ctx, s, 2.6); }); }
+    function at(e) { var r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    function ink() {                                         // the picture that goes on the document: only what was drawn, on nothing
+      var pts = [].concat.apply([], me.strokes), long = 0;
+      me.strokes.forEach(function (s) { for (var i = 1; i < s.length; i++) long += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]); });
+      if (pts.length < 6 || long < least) return '';         // a dot or a tick is not a signature
+      var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+      var x0 = Math.min.apply(null, xs) - 6, y0 = Math.min.apply(null, ys) - 6, w = Math.max.apply(null, xs) + 6 - x0, h = Math.max.apply(null, ys) + 6 - y0;
+      var k = Math.min(3, 900 / w), c = document.createElement('canvas');
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+      var g = c.getContext('2d'); g.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+      me.strokes.forEach(function (s) { line(g, s, 2.6); });
+      return c.toDataURL('image/png');
+    }
+    function changed() { me.ink = ink(); hint.hidden = me.strokes.length > 0; fill(); }
+    me.size = function () {
+      var r = canvas.getBoundingClientRect(), k = window.devicePixelRatio || 1;
+      if (!r.width) return;
+      canvas.width = Math.round(r.width * k); canvas.height = Math.round(r.height * k);
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+      draw();
+    };
+    me.set = function (strokes) { me.strokes = strokes || []; me.fresh = false; cur = null; draw(); changed(); };
+    canvas.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      try { canvas.setPointerCapture(e.pointerId); } catch (x) {}      // some browsers refuse it; drawing goes on without
+      cur = [at(e)]; me.strokes.push(cur); me.fresh = true; draw();
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!cur) return;
+      e.preventDefault();
+      var all = e.getCoalescedEvents ? e.getCoalescedEvents() : [];      // every point of a fast stroke, where the browser gives them
+      (all.length ? all : [e]).forEach(function (x) { cur.push(at(x)); });
+      draw();
+    });
+    ['pointerup', 'pointercancel'].forEach(function (n) { canvas.addEventListener(n, function () { if (cur) { cur = null; changed(); } }); });
+    clear.addEventListener('click', function () { me.set([]); });
+    return me;
+  }
+  var SIG = Pad($('pad'), $('pad-hint'), $('clear'), 60), INI = Pad($('ipad'), $('ipad-hint'), $('iclear'), 18);
+  // THE SIGNATURE DRAWN ON THIS PHONE IN THE LAST TWO HOURS IS OFFERED AGAIN, so a second form (the quote, then the card
+  // form) is not signed from scratch. It is kept on the phone only, and only once a form has been finished with it.
+  var MEM = 'plansman_sign_ink';
+  function recall() {
+    try {
+      var m = JSON.parse(localStorage.getItem(MEM) || 'null'), w = $('pad').getBoundingClientRect().width;
+      if (!m || Date.now() - m.t > 2 * 3600000 || !m.s || !w) return;
+      var k = m.w ? w / m.w : 1;
+      SIG.set(m.s.map(function (s) { return s.map(function (p) { return [p[0] * k, p[1] * k]; }); }));
+      if (SIG.ink) { $('sig-how').textContent = 'This is the signature you drew a little while ago on this phone. Clear it to draw it again.'; }
+      if (m.n && !$('name').value) $('name').value = m.n;
+    } catch (e) {}
+  }
+  function remember() {
+    try { if (SIG.ink) localStorage.setItem(MEM, JSON.stringify({ t: Date.now(), s: SIG.strokes, w: $('pad').getBoundingClientRect().width, n: $('name').value.trim() })); } catch (e) {}
+  }
+  window.addEventListener('resize', function () { SIG.size(); INI.size(); if (EDIT) shut(); fill(); });
+  $('name').addEventListener('input', fill);
   $('agree').addEventListener('change', ready);
+
+  // ---- is it ready to finish, and if not, what is left
+  function used(kind) {
+    return places().some(function (p, i) { return p.kind === kind && (!p.opt || ON[i]); }) || ADD.some(function (a) { return a.kind === kind; });
+  }
+  function offered(kind) { return places().some(function (p) { return p.kind === kind; }) || (D && D.free); }
+  function missing() {
+    return places().map(function (p, i) { return p.req && (p.kind === 'text' || p.kind === 'check') && !VAL[i] ? (p.label || 'a box on page ' + p.page) : null; }).filter(Boolean);
+  }
+  function anything() { return Object.keys(VAL).length || Object.keys(ON).length || ADD.length || (used('signature') && SIG.ink); }
+  function left() {
+    var out = [], miss = missing();
+    if (miss.length) out.push('fill in ' + miss.slice(0, 4).join(', ') + (miss.length > 4 ? ' and ' + (miss.length - 4) + ' more' : ''));
+    if (used('signature') && !SIG.ink) out.push('draw your signature');
+    if (SIG.ink && SIG.fresh && !used('signature')) out.push('tap the line your signature goes on (or Add, Signature, then tap the page)');
+    if (used('initials') && !INI.ink) out.push('draw your initials');
+    if (!out.length && !anything()) out.push('fill in the form: tap a box to type in it or tick it');
+    if ($('name').value.trim().length < 2) out.push('type your full name');
+    if (!$('agree').checked) out.push('tick the box to agree');
+    return out;
+  }
   function ready() {
-    var ok = !!INK && $('name').value.trim().length > 1 && $('agree').checked && D && D.state === 'ready' && !D.preview;
+    if (!D) return false;
+    var todo = left(), ok = !todo.length && live() && !D.preview;
     $('sign').disabled = !ok;
+    $('sign').textContent = used('signature') ? (places().some(function (p) { return p.kind === 'text' || p.kind === 'check'; }) || ADD.length ? 'Finish and sign' : 'Sign the document') : 'Finish the form';
+    $('left').textContent = live() && todo.length ? 'Still to do: ' + todo.join('; ') + '.' : '';
     return ok;
   }
 
-  // ---- signing, and the signed copy
+  // ---- finishing, and the finished copy
   $('sign').addEventListener('click', function () {
+    if (EDIT) shut();
     if (!ready()) return;
-    $('sign').disabled = true; $('sign').textContent = 'Signing…'; $('msg').textContent = '';
-    rpc('sign_submit', { p_token: token, p_name: $('name').value.trim(), p_signature: INK, p_agree: true }).then(function (r) {
-      if (r && r.ok && r.saved) { open(true); return; }
+    var label = $('sign').textContent, f = { v: {}, on: [], add: [] };
+    places().forEach(function (p, i) {
+      if ((p.kind === 'text' || p.kind === 'check') && VAL[i]) f.v[i] = VAL[i];
+      if (p.opt && ON[i]) f.on.push(i);
+    });
+    f.add = ADD.filter(function (a) { return a.kind !== 'text' || a.v; }).map(function (a) {
+      return { page: a.page, kind: a.kind, x: +a.x.toFixed(4), y: +a.y.toFixed(4), w: +a.w.toFixed(4), h: +a.h.toFixed(4), v: a.v };
+    });
+    $('sign').disabled = true; $('sign').textContent = 'Saving…'; $('msg').textContent = '';
+    rpc('sign_submit', { p_token: token, p_name: $('name').value.trim(), p_signature: used('signature') ? SIG.ink : null, p_agree: true, p_fields: f,
+                         p_initials: used('initials') ? INI.ink : null }).then(function (r) {
+      if (r && r.ok && r.saved) { remember(); open(true); return; }
       $('msg').textContent = (r && r.why) || 'That did not go through. Try once more.';
-      $('sign').textContent = 'Sign the document'; ready();
-    }).catch(function () { $('msg').textContent = 'No connection just now. Your signature is still here: try once more.'; $('sign').textContent = 'Sign the document'; ready(); });
+      $('sign').textContent = label; ready();
+    }).catch(function () { $('msg').textContent = 'No connection just now. What you filled in is still here: try once more.'; $('sign').textContent = label; ready(); });
   });
   function save() {
     var b = $('save');
@@ -231,29 +471,50 @@ footer a { color: inherit; text-decoration: none; }
       var a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([u], { type: 'application/pdf' })); a.download = r.name || 'signed.pdf'; a.target = '_blank'; a.rel = 'noopener';
       document.body.appendChild(a); a.click(); a.remove();
-      b.disabled = false; b.textContent = 'Save your signed copy (PDF)';
-    }).catch(function () { b.disabled = false; b.textContent = 'Save your signed copy (PDF)'; });
+      b.disabled = false; b.textContent = 'Save your copy (PDF)';
+    }).catch(function () { b.disabled = false; b.textContent = 'Save your copy (PDF)'; });
   }
   function show() {
     $('load').hidden = true; $('gone').hidden = true; $('doc').hidden = false;
+    var fills = places().some(function (p) { return p.kind === 'text' || p.kind === 'check' || p.opt; }) || D.free;
     $('title').textContent = D.title || 'A document to sign';
     $('sub').textContent = [D.about, D.signer ? 'For ' + D.signer : ''].filter(Boolean).join(' · ');
     $('preview').hidden = !D.preview; $('pv-who').textContent = D.signer || 'the signer';
-    $('tag').textContent = D.preview ? 'Preview' : 'Signing';
-    var dn = $('done');
+    $('tag').textContent = D.preview ? 'Preview' : fills ? 'Fill in and sign' : 'Signing';
+    var dn = $('done'), stamp = D.signed_at ? ' ' + esc(when(D.signed_at)) : '', back = D.back ? esc(D.back) : '';
+    var p4 = '<a class="go" href="https://plansman.ai/">Back to P4 to send it</a>';
     if (D.state === 'signed') {
-      dn.hidden = false; dn.innerHTML = '<b>Signed' + (D.signed_at ? ' ' + esc(when(D.signed_at)) : '') + '.</b> Thank you' + (D.signed_name ? ', ' + esc(D.signed_name.split(' ')[0]) : '') +
-        '. Your signature is being placed on the document. Your signed copy will show here in a minute; you can leave this page and come back to the same link.';
+      dn.hidden = false;
+      dn.innerHTML = back ? '<b>Done' + stamp + '.</b> It is being put on the form and attached to your reply to ' + back + '. That reply is waiting for your Send in P4.' + p4
+        : '<b>Signed' + stamp + '.</b> Thank you' + (D.signed_name ? ', ' + esc(D.signed_name.split(' ')[0]) : '') +
+          '. It is being placed on the document. Your signed copy will show here in a minute; you can leave this page and come back to the same link.';
     } else if (D.state === 'stamped') {
-      dn.hidden = false; dn.innerHTML = '<b>Signed' + (D.signed_at ? ' ' + esc(when(D.signed_at)) : '') + '.</b> Thank you. This is the signed document.' +
-        (D.file ? '<button type="button" class="go sec" id="save">Save your signed copy (PDF)</button>' : '');
+      dn.hidden = false;
+      dn.innerHTML = '<b>' + (back ? 'Done' : 'Signed') + stamp + '.</b> ' +
+        (D.erased ? 'It has gone, and no copy of it is kept here.'
+          : back ? 'It is attached to your reply to ' + back + ', which waits for your Send in P4.' + (D['private'] ? ' Once that reply has gone, P4 erases its copy of this form.' : '')
+          : 'Thank you. This is the signed document.') +
+        (D.file ? '<button type="button" class="go sec" id="save">Save your copy (PDF)</button>' : '') + (back && !D.erased ? p4 : '');
       if ($('save')) $('save').addEventListener('click', save);
     } else dn.hidden = true;
-    $('doc-lbl').textContent = D.state === 'stamped' ? 'The signed document' : 'The document';
-    $('panel').hidden = D.state !== 'ready';
-    if (D.state === 'ready' && !$('name').value && !D.preview) $('name').value = D.signer || '';
+    $('doc-lbl').textContent = D.state === 'stamped' ? (back ? 'The filled form' : 'The signed document') : 'The document';
+    var how = $('how');
+    how.hidden = !(live() && fills);
+    how.innerHTML = 'Tap an orange box to type in it. Tap <b>Tap to sign</b> or <b>Tap for date</b> to put your signature or today’s date on that line.' +
+      (D.free ? ' <b>Add</b> puts text, a tick, the date or your signature anywhere else on the page.' : '') +
+      (D['private'] ? ' <b>Private:</b> what you type goes on the form and nowhere else.' : '');
+    $('tools').hidden = !(live() && D.free && !D.preview);
+    $('panel').hidden = !live();
+    if (live()) {
+      $('sig-part').hidden = !offered('signature');
+      $('ini-part').hidden = !places().some(function (p) { return p.kind === 'initials'; });
+      $('fine').textContent = back ? 'When you finish, the filled form is attached to your reply to ' + D.back + ' in P4. Nothing is sent until you tap Send there.' +
+          (D['private'] ? ' P4 erases its copy of this form once that reply has gone.' : '')
+        : 'What you enter and your signature are recorded with this document together with the time and the device it was signed on. You can save your copy here as soon as it is ready.';
+      if (!$('name').value && !D.preview) $('name').value = D.signer || '';
+    }
     pages();
-    if (D.state === 'ready') { size(); ready(); }
+    if (live()) { SIG.size(); INI.size(); if (!SIG.strokes.length && !D.preview) recall(); ready(); }
   }
   var timer = null;
   function open(again) {
@@ -263,7 +524,7 @@ footer a { color: inherit; text-decoration: none; }
       if (d.state === 'expired') { gone('<b>This link has ended.</b> Reply to the email it came in and we will send a new one.'); return; }
       if (d.state === 'void') { gone('<b>This link was withdrawn.</b> If you were expecting to sign something, reply to the email it came in.'); return; }
       D = d; show();
-      if (d.state === 'signed') timer = setTimeout(open, 4000);          // until the office has put the signature on it
+      if (d.state === 'signed') timer = setTimeout(open, 4000);          // until the office has put it on the document
     }).catch(function () {
       if (!again && !D) gone('<b>No connection just now.</b> Check your signal and open the link again.');
       else timer = setTimeout(open, 6000);
