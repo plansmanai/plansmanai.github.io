@@ -38,7 +38,9 @@ h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(1.7rem, 6vw, 
 .pg { position: relative; background: var(--paper); border: 1px solid var(--rule); margin: 0 0 12px; overflow: hidden; }
 .pg img.sheet { display: block; width: 100%; height: auto; -webkit-user-select: none; user-select: none; }
 .pg .wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .8rem; }
-.pg.aim { cursor: crosshair; outline: 2px solid var(--mark); outline-offset: -2px; }
+/* cursor: pointer, not a crosshair: an iPhone only sends a tap on a plain picture to the page when it is marked as something to tap */
+.pg.aim, .pg.aim img.sheet { cursor: pointer; }
+.pg.aim { outline: 2px solid var(--mark); outline-offset: -2px; }
 .spot { position: absolute; border: 1.5px solid var(--mark); background: rgba(200, 80, 30, .09); display: flex; align-items: flex-end; overflow: hidden; cursor: pointer; }
 .spot i { position: absolute; left: 0; top: 0; font-style: normal; font-size: 9px; line-height: 1; letter-spacing: .08em; text-transform: uppercase; background: var(--mark); color: #fff; padding: 2px 4px; white-space: nowrap; }
 .spot img { position: absolute; left: 0; bottom: 0; height: 100%; width: auto; max-width: 100%; object-fit: contain; object-position: left bottom; }
