@@ -62,7 +62,8 @@ h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(1.7rem, 6vw, 
 .spot.mine { overflow: visible; touch-action: none; border-style: dotted; }
 .spot.mine.done { border-color: rgba(18, 19, 17, .28); border-style: dotted; }
 .spot.fixed { border-color: transparent !important; background: none !important; cursor: default; } .spot.fixed:not(.done), .spot.fixed i { display: none; }
-.spot.mine b { position: absolute; right: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: var(--fg); color: #fff; font: 600 13px/22px var(--sans); text-align: center; }
+.spot.mine b { position: absolute; right: -15px; top: -13px; width: 17px; height: 17px; border-radius: 50%; background: var(--fg); color: #fff; font: 600 11px/17px var(--sans); text-align: center; opacity: .82; }
+.spot.mine b::before { content: ''; position: absolute; inset: -8px; }
 #ed { position: absolute; z-index: 6; height: 40px; padding: 6px 10px; font: inherit; font-size: 16px; color: var(--fg); background: #fff; border: 2px solid var(--fg); border-radius: 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
 #tools { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; margin: 0 0 6px; background: var(--bg); }
 #tools span { font-size: .7rem; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
@@ -196,6 +197,26 @@ footer a { color: inherit; text-decoration: none; }
     box.appendChild(el);
     return el;
   }
+  // WHAT HE ADDS IS AS WIDE AS WHAT IT SAYS, so it can sit anywhere, the right edge too, and it grows as he types. It moves
+  // left only when the words would run off the page. (The paper is written at 11 points; the ruler measures at that.)
+  var ruler = document.createElement('canvas').getContext('2d');
+  function fit(a) {
+    if (!a || (a.kind !== 'text' && a.kind !== 'date')) return;
+    var W = pageOf(a.page).pt || 612;
+    ruler.font = '11px Helvetica, Arial, sans-serif';
+    var w = Math.min(0.99, Math.max(44, ruler.measureText(String(a.v || '')).width + 12) / W);
+    if (a.x + w > 0.995) a.x = Math.max(0.005, 0.995 - w);
+    a.w = w;
+  }
+  // A FINGER IS WIDER THAN A LINE OF A FORM: a tap beside a box counts as a tap on it (the nearest one within a finger's width)
+  function near(pg, x, y) {
+    var best = null, d0 = 20;
+    [].forEach.call(pg.querySelectorAll('.spot'), function (el) {
+      var r = el.getBoundingClientRect(), d = Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom));
+      if (d < d0) { d0 = d; best = el; }
+    });
+    return best;
+  }
   function spots() {
     [].forEach.call(document.querySelectorAll('.spot'), function (el) { el.remove(); });
     if (D.state === 'stamped') return;                       // the finished pages carry everything themselves
@@ -250,7 +271,10 @@ footer a { color: inherit; text-decoration: none; }
   function keep() {
     if (!EDIT) return;
     var v = ed.value.replace(/\s+/g, ' ').trim();
-    if (EDIT.a != null) { if (ADD[EDIT.a]) ADD[EDIT.a].v = v; } else if (v) VAL[EDIT.i] = v; else delete VAL[EDIT.i];
+    if (EDIT.a != null) {
+      var a = ADD[EDIT.a], el = document.querySelector('.spot[data-a="' + EDIT.a + '"]');
+      if (a) { a.v = v; fit(a); if (el) { el.style.left = (a.x * 100) + '%'; el.style.width = (a.w * 100) + '%'; } }
+    } else if (v) VAL[EDIT.i] = v; else delete VAL[EDIT.i];
   }
   function shut() {
     if (!EDIT) return;
@@ -282,6 +306,7 @@ footer a { color: inherit; text-decoration: none; }
     if (drag && drag.moved) { drag = null; return; }
     if (x) { ADD.splice(+x.getAttribute('data-x'), 1); spots(); return; }
     if (MODE && pg && !el) { put(pg, e); return; }
+    if (!el && pg) el = near(pg, e.clientX, e.clientY);
     if (!el) return;
     var mine = el.hasAttribute('data-a'), i = +(el.getAttribute(mine ? 'data-a' : 'data-i')), p = mine ? ADD[i] : places()[i];
     if (!p) return;
@@ -307,9 +332,10 @@ footer a { color: inherit; text-decoration: none; }
     var x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height, a;
     if (MODE === 'check') a = { kind: 'check', w: 12 / W, h: 12 / H, x: x - 6 / W, y: y - 6 / H, v: true };
     else if (MODE === 'signature') a = { kind: 'signature', w: 0.34, h: 36 / H, x: x, y: y - 30 / H, v: true };
-    else if (MODE === 'date') a = { kind: 'date', w: 0.17, h: 17 / H, x: x, y: y - 13 / H, v: today() };
-    else a = { kind: 'text', w: 0.36, h: 17 / H, x: x, y: y - 13 / H, v: '' };
+    else if (MODE === 'date') a = { kind: 'date', w: 0.12, h: 17 / H, x: x, y: y - 13 / H, v: today() };
+    else a = { kind: 'text', w: 0.08, h: 17 / H, x: x, y: y - 13 / H, v: '' };
     a.page = n;
+    fit(a);
     a.x = Math.max(0, Math.min(a.x, 0.995 - Math.min(a.w, 0.9))); a.w = Math.min(a.w, 0.995 - a.x);
     a.y = Math.max(0, Math.min(a.y, 0.995 - a.h));
     ADD.push(a);
