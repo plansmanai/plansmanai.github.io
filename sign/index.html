@@ -61,6 +61,7 @@ h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(1.7rem, 6vw, 
 /* something the signer put on the page themselves: it can be dragged, and taken off */
 .spot.mine { overflow: visible; touch-action: none; border-style: dotted; }
 .spot.mine.done { border-color: rgba(18, 19, 17, .28); border-style: dotted; }
+.spot.fixed { border-color: transparent !important; background: none !important; cursor: default; } .spot.fixed:not(.done), .spot.fixed i { display: none; }
 .spot.mine b { position: absolute; right: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%; background: var(--fg); color: #fff; font: 600 13px/22px var(--sans); text-align: center; }
 #ed { position: absolute; z-index: 6; height: 40px; padding: 6px 10px; font: inherit; font-size: 16px; color: var(--fg); background: #fff; border: 2px solid var(--fg); border-radius: 0; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
 #tools { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0; margin: 0 0 6px; background: var(--bg); }
@@ -151,7 +152,8 @@ footer a { color: inherit; text-decoration: none; }
   function when(s) { try { return new Date(s).toLocaleString(undefined, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } }
   function today() { var d = new Date(); return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(); }
   function gone(text) { $('load').hidden = true; $('doc').hidden = true; $('gone').hidden = false; $('gone').innerHTML = text; }
-  function places() { return (D && D.places) || []; }
+  var KEPT = null;                                           // the places as they were when he finished: the server gives none once it is signed
+  function places() { return D && D.places && D.places.length ? D.places : (D && D.state === 'signed' && KEPT) || []; }
   function live() { return !!D && D.state === 'ready'; }
   function pageOf(n) { return ((D && D.pages) || []).filter(function (p) { return p.n === n; })[0] || { w: 612, h: 792, pt: 612 }; }
 
@@ -185,17 +187,18 @@ footer a { color: inherit; text-decoration: none; }
     var box = document.querySelector('.pg[data-n="' + p.page + '"]');
     if (!box) return null;
     var el = document.createElement('div');
-    el.className = 'spot k-' + p.kind + (p.opt ? ' opt' : '') + (p.req ? ' need' : '') + (attr === 'data-a' ? ' mine' : '');
+    el.className = 'spot k-' + p.kind + (p.opt ? ' opt' : '') + (p.req ? ' need' : '') + (attr === 'data-a' ? ' mine' : '') + (live() ? '' : ' fixed');
     el.setAttribute(attr, id); el.setAttribute('data-kind', p.kind);
     if (p.label) el.title = p.label;
     el.style.left = (p.x * 100) + '%'; el.style.top = (p.y * 100) + '%'; el.style.width = (p.w * 100) + '%'; el.style.height = (p.h * 100) + '%';
     if (TAG[p.kind] && attr === 'data-i') el.innerHTML = '<i>' + TAG[p.kind][p.opt ? 1 : 0] + '</i>';
-    if (attr === 'data-a') el.innerHTML = '<b data-x="' + id + '" aria-label="Take this off">×</b>';
+    if (attr === 'data-a' && live()) el.innerHTML = '<b data-x="' + id + '" aria-label="Take this off">×</b>';
     box.appendChild(el);
     return el;
   }
   function spots() {
     [].forEach.call(document.querySelectorAll('.spot'), function (el) { el.remove(); });
+    if (D.state === 'stamped') return;                       // the finished pages carry everything themselves
     places().forEach(function (p, i) { spotEl(p, 'data-i', i); });
     ADD.forEach(function (a, i) { spotEl(a, 'data-a', i); });
     fill();
@@ -204,7 +207,7 @@ footer a { color: inherit; text-decoration: none; }
   function holds(p, i, mine) {
     if (p.kind === 'signature') return (mine || !p.opt || ON[i]) && SIG.ink ? { img: SIG.ink } : null;
     if (p.kind === 'initials') return (mine || !p.opt || ON[i]) && INI.ink ? { img: INI.ink } : null;
-    if (p.kind === 'date') return mine ? { text: p.v || today() } : (!p.opt || ON[i]) ? { text: today() } : null;
+    if (p.kind === 'date') return mine ? { text: p.v || today() } : (!p.opt || ON[i]) ? { text: (p.opt && typeof VAL[i] === 'string' && VAL[i]) || today() } : null;
     if (p.kind === 'name') return $('name').value.trim() ? { text: $('name').value.trim() } : null;
     if (p.kind === 'check') return (mine ? true : VAL[i]) ? { text: '✓', tick: true } : null;
     var t = mine ? p.v : VAL[i];
@@ -239,8 +242,9 @@ footer a { color: inherit; text-decoration: none; }
     ed.style.width = wide + 'px';
     ed.style.left = Math.max(4, Math.min(r.left - host.left - 4, host.width - wide - 4)) + 'px';
     ed.style.top = (r.bottom - host.top - 36) + 'px';
-    ed.placeholder = p.label || 'Type here';
-    ed.value = (key.a != null ? p.v : VAL[key.i]) || '';
+    ed.placeholder = p.kind === 'date' ? 'The date' : p.label || 'Type here';
+    ed.value = (key.a != null ? p.v : VAL[key.i]) || (p.kind === 'date' ? today() : '');
+    ed.enterKeyHint = p.kind === 'date' ? 'done' : 'next';
     ed.focus();
   }
   function keep() {
@@ -254,6 +258,7 @@ footer a { color: inherit; text-decoration: none; }
     var was = EDIT;
     EDIT = null; ed.hidden = true;
     if (was.a != null && ADD[was.a] && !ADD[was.a].v) { ADD.splice(was.a, 1); spots(); return; }      // text he put on the page and left empty is not there
+    if (was.i != null && (places()[was.i] || {}).kind === 'date' && !VAL[was.i]) delete ON[was.i];       // a date he emptied is off the line again
     fill();
   }
   ed.addEventListener('input', keep);
@@ -263,6 +268,7 @@ footer a { color: inherit; text-decoration: none; }
     e.preventDefault();
     var was = EDIT, next = null;
     if (was && was.i != null) places().forEach(function (p, i) { if (next == null && i > was.i && p.kind === 'text') next = i; });
+    if (was && ((target(was) || {}).kind === 'date')) { shut(); ed.blur(); return; }
     keep(); EDIT = null; fill();
     if (next != null) edit({ i: next }); else { ed.hidden = true; ed.blur(); }
   });
@@ -280,9 +286,11 @@ footer a { color: inherit; text-decoration: none; }
     var mine = el.hasAttribute('data-a'), i = +(el.getAttribute(mine ? 'data-a' : 'data-i')), p = mine ? ADD[i] : places()[i];
     if (!p) return;
     if (p.kind === 'text') { edit(mine ? { a: i } : { i: i }); return; }
+    if (mine && p.kind === 'date') { edit({ a: i }); return; }      // tap it to type another date; drag it to move it
     if (mine) { if (p.kind === 'signature' && !SIG.ink) toPanel('Draw your signature below. It will show where you put it.'); return; }
     if (p.kind === 'check') { if (VAL[i]) delete VAL[i]; else VAL[i] = true; fill(); return; }
     if (p.kind === 'name') { $('name').focus(); return; }
+    if (p.opt && p.kind === 'date' && ON[i]) { edit({ i: i }); return; }      // it is on the line: tap again to type another date (empty takes it off)
     if (p.opt) {
       if (ON[i]) delete ON[i]; else ON[i] = true;
       fill();
@@ -449,7 +457,7 @@ footer a { color: inherit; text-decoration: none; }
     if (!ready()) return;
     var label = $('sign').textContent, f = { v: {}, on: [], add: [] };
     places().forEach(function (p, i) {
-      if ((p.kind === 'text' || p.kind === 'check') && VAL[i]) f.v[i] = VAL[i];
+      if ((p.kind === 'text' || p.kind === 'check' || (p.kind === 'date' && p.opt && ON[i])) && VAL[i]) f.v[i] = VAL[i];
       if (p.opt && ON[i]) f.on.push(i);
     });
     f.add = ADD.filter(function (a) { return a.kind !== 'text' || a.v; }).map(function (a) {
@@ -458,7 +466,7 @@ footer a { color: inherit; text-decoration: none; }
     $('sign').disabled = true; $('sign').textContent = 'Saving…'; $('msg').textContent = '';
     rpc('sign_submit', { p_token: token, p_name: $('name').value.trim(), p_signature: used('signature') ? SIG.ink : null, p_agree: true, p_fields: f,
                          p_initials: used('initials') ? INI.ink : null }).then(function (r) {
-      if (r && r.ok && r.saved) { remember(); open(true); return; }
+      if (r && r.ok && r.saved) { remember(); KEPT = places().slice(); mode(null); open(true); return; }
       $('msg').textContent = (r && r.why) || 'That did not go through. Try once more.';
       $('sign').textContent = label; ready();
     }).catch(function () { $('msg').textContent = 'No connection just now. What you filled in is still here: try once more.'; $('sign').textContent = label; ready(); });
@@ -502,7 +510,7 @@ footer a { color: inherit; text-decoration: none; }
     $('doc-lbl').textContent = D.state === 'stamped' ? (back ? 'The filled form' : 'The signed document') : 'The document';
     var how = $('how');
     how.hidden = !(live() && fills);
-    how.innerHTML = 'Tap an orange box to type in it. Tap <b>Tap to sign</b> or <b>Tap for date</b> to put your signature or today’s date on that line.' +
+    how.innerHTML = 'Tap an orange box to type in it. Tap <b>Tap to sign</b> or <b>Tap for date</b> to put your signature or today’s date on that line; tap a date again to type a different one.' +
       (D.free ? ' <b>Add</b> puts text, a tick, the date or your signature anywhere else on the page.' : '') +
       (D['private'] ? ' <b>Private:</b> what you type goes on the form and nowhere else.' : '');
     $('tools').hidden = !(live() && D.free && !D.preview);
